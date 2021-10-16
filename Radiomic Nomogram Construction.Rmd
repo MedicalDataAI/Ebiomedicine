@@ -1,0 +1,263 @@
+---
+title: "Radiomic Nomogram Construction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+Generating Radiomic Signature the differential diagnosis of breast masses.
+
+Initial Setup and Package Loads in R 
+
+Packages used for the analysis.
+```{r initial_setup, cache=FALSE, message = FALSE, warning = FALSE}
+library(glmnet);library(rms);library(pROC);library(corrplot);library(ggplot2);library(DMwR);library(mRMRe);library(caret);library(corrplot);library(RColorBrewer);library(ICC);library(DTComPair);library(knitr);library(tidyverse)
+
+## Global options
+
+options(max.print="75")
+opts_chunk$set(comment=NA,
+               message=FALSE,
+               warning=FALSE)
+opts_knit$set(width=75)
+
+skimr::skim_with(numeric = list(hist = NULL),
+                 integer = list(hist = NULL))
+
+```
+
+# Loading the Raw Data into R 
+```{r}
+dfRadiomicsFeature_bmus <- read.csv("./sample/sample_bmus.csv", header=T, sep=',')
+dfRadiomicsFeature_es <- read.csv("./sample/sample_es.csv", header=T, sep=',')
+dfClinicalFeature <- read.csv("./sample/sample_clinical.csv", header=T, sep=',')
+print("Input data dimension of bmus:")
+print(dim(dfRadiomicsFeature_bmus))
+print("Input data dimension of es:")
+print(dim(dfRadiomicsFeature_es))
+print("Input data dimension of clinical:")
+print(dim(dfClinicalFeature))
+head(dfClinicalFeature)
+dfPredict <- dfClinicalFeature[c("ID", "Label")]
+```
+
+# Construct Radiomics Signature based on bmus
+```{r}
+objRadiomics <- read.csv("./model/objRadiomics_bmus.csv", header=T, sep=',', stringsAsFactors = F)
+objRadiomics
+objScale <- read.csv("./model/objCenterScale_bmus.csv", header=T, sep=',', stringsAsFactors = F)
+useRadiomicsFeatureNames <- objRadiomics[["y"]][2:nrow(objRadiomics)]
+dfInput = dfRadiomicsFeature_bmus[useRadiomicsFeatureNames]
+for (featureName in useRadiomicsFeatureNames) {
+      dfInput[[featureName]] <- (dfInput[[featureName]]-objScale[[featureName]][1]) / objScale[[featureName]][2]
+}
+
+tmpRes <- lapply(2:nrow(objRadiomics), function(i) {
+    featureValues <- dfInput[[objRadiomics[["y"]][i]]]
+    tmpValues <- featureValues*objRadiomics[["x"]][i]
+    dfValues <- data.frame(tmpValues)
+})
+tmpStore <- data.frame(tmpRes)
+tmpStore[[objRadiomics[["y"]][1]]] <- rep(objRadiomics[["x"]][1], nrow(tmpStore))
+Signature_bmus <- rowSums(tmpStore)
+dfPredict[["Signature_bmus"]] = Signature_bmus
+dfPredict
+# show predict signature values
+threshold_bmus <- -0.619444282
+dfShowSet <- subset(dfPredict, select = c("Label", "Signature_bmus"))
+dfShowSetOrder <- dfShowSet[order(dfShowSet[["Signature_bmus"]]),]
+dfShowSetOrder<-within(dfShowSetOrder,{
+  color<-NA
+  color[dfShowSetOrder[["Label"]] == 0]<-"red"
+  color[dfShowSetOrder[["Label"]] == 1]<-"green"})
+barplotTitle <- sprintf("Radiomics signature for each patient by bmus")
+dev.new()
+barplot((dfShowSetOrder[["Signature_bmus"]]-threshold_bmus),
+        col=dfShowSetOrder$color,
+        border = NA,
+        space = 0,
+        main="Radiomics signature for each patient by bmus",
+        ylab="Radiomics signature",
+        ylim=c(-5, 5))
+legend("bottomright",
+       legend=c("LowRisk", "HighRisk"),
+       pch=15,col=c("red", "green"))
+```
+
+
+# Construct Radiomics Signature based on es
+```{r}
+# rm(objRadiomics)
+# rm(objScale)
+# rm(useRadiomicsFeatureNames)
+# rm(dfInput)
+# rm(tmpRes)
+# rm(tmpStore)
+# rm(threshold_bmus)
+objRadiomics <- read.csv("./model/objRadiomics_es.csv", header=T, sep=',', stringsAsFactors = F)
+objRadiomics
+objScale <- read.csv("./model/objCenterScale_es.csv", header=T, sep=',', stringsAsFactors = F)
+useRadiomicsFeatureNames <- objRadiomics[["y"]][2:nrow(objRadiomics)]
+dfInput = dfRadiomicsFeature_es[useRadiomicsFeatureNames]
+for (featureName in useRadiomicsFeatureNames) {
+      dfInput[[featureName]] <- (dfInput[[featureName]]-objScale[[featureName]][1]) / objScale[[featureName]][2]
+}
+
+tmpRes <- lapply(2:nrow(objRadiomics), function(i) {
+    featureValues <- dfInput[[objRadiomics[["y"]][i]]]
+    tmpValues <- featureValues*objRadiomics[["x"]][i]
+    dfValues <- data.frame(tmpValues)
+})
+tmpStore <- data.frame(tmpRes)
+tmpStore[[objRadiomics[["y"]][1]]] <- rep(objRadiomics[["x"]][1], nrow(tmpStore))
+Signature_es <- rowSums(tmpStore)
+dfPredict[["Signature_es"]] = Signature_es
+dfPredict
+# show predict signature values
+threshold_es <- -0.6621125775
+dfShowSet <- subset(dfPredict, select = c("Label", "Signature_es"))
+dfShowSetOrder <- dfShowSet[order(dfShowSet[["Signature_es"]]),]
+dfShowSetOrder<-within(dfShowSetOrder,{
+  color<-NA
+  color[dfShowSetOrder[["Label"]] == 0]<-"red"
+  color[dfShowSetOrder[["Label"]] == 1]<-"green"})
+barplotTitle <- sprintf("Radiomics signature for each patient by bmus")
+dev.new()
+barplot((dfShowSetOrder[["Signature_es"]]-threshold_es),
+        col=dfShowSetOrder$color,
+        border = NA,
+        space = 0,
+        main="Radiomics signature for each patient by es",
+        ylab="Radiomics signature",
+        ylim=c(-5, 5))
+legend("bottomright",
+       legend=c("LowRisk", "HighRisk"),
+       pch=15,col=c("red", "green"))
+```
+
+# Construct Clinical Risk based on clinical factors
+```{r}
+# rm(objRadiomics)
+# rm(objScale)
+# rm(useRadiomicsFeatureNames)
+# rm(dfInput)
+# rm(tmpRes)
+# rm(tmpStore)
+# rm(threshold_es)
+
+objClinical <- read.csv("./model/objClinical.csv", header=T, sep=',', stringsAsFactors = F)
+objClinical
+
+dfInput = dfClinicalFeature
+tmpRes <- lapply(2:nrow(objClinical), function(i) {
+    featureValues <- dfInput[[objClinical[["Variable"]][i]]]
+    tmpValues <- featureValues*objClinical[["Coefficient"]][i]
+    dfValues <- data.frame(tmpValues)
+})
+tmpStore <- data.frame(tmpRes)
+tmpStore[[objClinical[["Variable"]][1]]] <- rep(objClinical[["Coefficient"]][1], nrow(tmpStore))
+RiskLog_Clinical <- rowSums(tmpStore)
+# dfPredict[["RiskLog_clinical"]] = RiskLog_clinical
+dfPredict[["Risk_Clinical"]] = plogis(RiskLog_Clinical)
+dfPredict
+
+# show predict values
+threshold_clinical <- 0.436346787004995
+dfShowSet <- subset(dfPredict, select = c("Label", "Risk_Clinical"))
+dfShowSetOrder <- dfShowSet[order(dfShowSet[["Risk_Clinical"]]),]
+dfShowSetOrder<-within(dfShowSetOrder,{
+  color<-NA
+  color[dfShowSetOrder[["Label"]] == 0]<-"red"
+  color[dfShowSetOrder[["Label"]] == 1]<-"green"})
+barplotTitle <- sprintf("Clinical Risk for each patient")
+dev.new()
+barplot((dfShowSetOrder[["Risk_Clinical"]]-threshold_clinical),
+        col=dfShowSetOrder$color,
+        border = NA,
+        space = 0,
+        main="Clinical Risk for each patient",
+        ylab="Probability Risk",
+        ylim=c(-1, 1))
+legend("bottomright",
+       legend=c("LowRisk", "HighRisk"),
+       pch=15,col=c("red", "green"))
+```
+
+
+# Construct Radiomics Nomogram based on radiomics signature and clinical factors
+```{r}
+# rm(dfInput)
+# rm(tmpRes)
+# rm(tmpStore)
+objRadiomicsNomogram <- read.csv("./model/objRadiomicsNomogram.csv", header=T, sep=',', stringsAsFactors = F)
+objRadiomicsNomogram
+
+dfInput = cbind(dfClinicalFeature, dfPredict[c("Signature_bmus", "Signature_es")])
+tmpRes <- lapply(2:nrow(objRadiomicsNomogram), function(i) {
+    featureValues <- dfInput[[objRadiomicsNomogram[["Variable"]][i]]]
+    tmpValues <- featureValues*objRadiomicsNomogram[["Coefficient"]][i]
+    dfValues <- data.frame(tmpValues)
+})
+tmpStore <- data.frame(tmpRes)
+tmpStore[[objRadiomicsNomogram[["Variable"]][1]]] <- rep(objRadiomicsNomogram[["Coefficient"]][1], nrow(tmpStore))
+RiskLog_RadiomicsNomogram <- rowSums(tmpStore)
+# dfPredict[["RiskLog_RadiomicsNomogram"]] = RiskLog_RadiomicsNomogram
+dfPredict[["Risk_RadiomicsNomogram"]] = plogis(RiskLog_RadiomicsNomogram)
+dfPredict
+
+# show predict values
+threshold_nomo <- 0.275281806650769
+dfShowSet <- subset(dfPredict, select = c("Label", "Risk_RadiomicsNomogram"))
+dfShowSetOrder <- dfShowSet[order(dfShowSet[["Risk_RadiomicsNomogram"]]),]
+dfShowSetOrder<-within(dfShowSetOrder,{
+  color<-NA
+  color[dfShowSetOrder[["Label"]] == 0]<-"red"
+  color[dfShowSetOrder[["Label"]] == 1]<-"green"})
+barplotTitle <- sprintf("Risk of Radiomics Nomogram for each patient")
+dev.new()
+barplot((dfShowSetOrder[["Risk_RadiomicsNomogram"]]-threshold_nomo),
+        col=dfShowSetOrder$color,
+        border = NA,
+        space = 0,
+        main="Risk of Radiomics Nomogram for each patient",
+        ylab="Probability Risk",
+        ylim=c(-1, 1))
+legend("bottomright",
+       legend=c("LowRisk", "HighRisk"),
+       pch=15,col=c("red", "green"))
+
+```
+
+# Show the performance of different models
+```{r}
+dfInput <- dfPredict
+dfInput
+write.csv(dfPredict, "./sample result/result.csv", row.names = FALSE)
+# plotColors <- c('yellowgreen', 'lightblue', 'lightcoral', 'lightcyan','yellow', 
+#                    'lightgreen',
+#                    'yellowgreen', 'darkcyan', 'blue', 'brown',
+#                    'chartreuse', 'coral', 'darkgreen', 'lightblue',
+#                    'orange', 'orangered', 'purple', 'red')
+plotColors <- c('yellowgreen', 'lightblue', 'lightcoral', "orange", 'red')
+showFeatureNames <- c("Signature_bmus", "Signature_es", "Risk_Clinical", "Risk_RadiomicsNomogram")
+# showFeatureNames <- c("Signature_bmus", "Signature_bmus", "Signature_bmus", "Risk_RadiomicsNomogram")
+for (indexFeature in 1:4){
+  rocFeature <- roc(
+    response=dfInput[["Label"]], 
+    predictor=dfInput[[showFeatureNames[indexFeature]]]) 
+  if (1 == indexFeature) {
+    plot(rocFeature, 
+         col=plotColors[indexFeature], main = "ROC of different models", lwd=3) 
+  } else {
+    plot.roc(rocFeature, add=TRUE, col=plotColors[indexFeature], lwd=3)
+  }
+}
+legend("bottomright", 
+       legend=showFeatureNames,
+       col=plotColors[1:4],
+       lty=1,lwd=2,bty='n')
+
+```
